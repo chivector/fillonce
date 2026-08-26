@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.10", "3.12"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - run: uv sync --all-extras --locked --python ${{ matrix.python-version }}
+      - run: uv run ruff check .
+      - run: uv run pytest --cov=fillonce --cov-report=term-missing --cov-fail-under=85
+
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv build
+      - name: Validate distribution metadata
+        run: uv tool run --python 3.12 --from "twine>=7,<8" twine check dist/*
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v9
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - run: uv sync --all-extras --locked --python 3.12
+      - name: Audit Python dependencies
+        run: uv run --with "pip-audit>=2.9,<3" pip-audit

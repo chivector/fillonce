@@ -23,16 +23,19 @@ Most form fillers automate typing. FillOnce automates the paperwork around the f
 
 - reuse facts from JSON, YAML, PDF, DOCX, Markdown, text, or CSV;
 - match different labels such as “surname”, “family name”, and “姓”;
-- stop when two documents disagree instead of silently picking one;
+- stop when two documents disagree, then let you choose the exact evidence candidate;
 - keep native AcroForm fields editable;
+- support text, checkbox, choice, and radio fields with their real PDF export values;
+- bind every review plan to the exact original PDF with SHA-256;
+- verify the field tree, page widgets, values, and appearances after every write;
 - emit JSON and human-readable HTML evidence for every proposed value;
 - run on your machine and delete web-session uploads immediately after each request.
 
 The result is not a chatbot transcript. It is a PDF you can inspect, edit, sign, and submit yourself.
 
 <div align="center">
-  <img src="assets/demo-filled.png" alt="A synthetic fellowship form completed by FillOnce" width="720">
-  <p><sub>Generated from the fictional files in <a href="examples">examples/</a>. The PDF remains editable.</sub></p>
+  <img src="assets/demo-filled.svg" alt="A synthetic fellowship form completed by FillOnce with source evidence" width="820">
+  <p><sub>Generated from the fictional dataset shown in <a href="examples">examples/</a>. The PDF remains editable.</sub></p>
 </div>
 
 ## 60-second demo
@@ -42,8 +45,17 @@ Requires Python 3.10+ and [uv](https://docs.astral.sh/uv/).
 ```bash
 git clone https://github.com/chivector/fillonce.git
 cd fillonce
-uv sync --all-extras
+uv sync --all-extras --locked
 uv run fillonce demo
+```
+
+No `uv`? A regular virtual environment works too:
+
+```bash
+python -m venv .venv
+# activate .venv for your shell
+python -m pip install -e ".[demo,web]"
+fillonce demo
 ```
 
 Open these generated files:
@@ -65,6 +77,15 @@ uv run fillonce serve
 # open http://127.0.0.1:8765
 ```
 
+The review server is stateless: the blank PDF is previewed locally in your browser, planning and applying use separate request-scoped temporary directories, and results are returned as a ZIP containing the editable PDF, plan, and both audit formats. Conflicts and fuzzy matches expose their evidence candidates so you can resolve them without retyping.
+
+Or run the same local UI in an ephemeral container:
+
+```bash
+docker build -t fillonce .
+docker run --rm -p 127.0.0.1:8765:8765 fillonce
+```
+
 No API key is required for the deterministic v0.1 pipeline.
 
 ### Optional grounded Agent matching
@@ -78,6 +99,8 @@ uv run fillonce plan blank.pdf profile.json resume.docx \
 ```
 
 The model never gets permission to write a value. It can only return an existing `fact_id`, and every Agent suggestion is capped below the automatic-fill threshold and marked `review`. Remote endpoints receive field labels, extracted values, and evidence, so use them only if their privacy policy is appropriate for your documents.
+
+Set `FILLONCE_AGENT_API_KEY` if the endpoint requires authentication. Agent matching is never invoked unless `--agent-model` is supplied.
 
 ## How it works
 
@@ -98,7 +121,8 @@ FillOnce uses a deliberately conservative matching engine. Exact semantic aliase
 | `ready` | Exact, single-source semantic match | Filled |
 | `review` | Plausible but uncertain match | Left blank |
 | `missing` | No supported fact | Left blank |
-| `conflict` | Sources contain different values | Left blank |
+| `conflict` | Sources contain different values | Left blank until you select evidence |
+| `skip` | Unsupported button, radio, or signature field | Left untouched |
 
 ## CLI
 
@@ -126,6 +150,14 @@ Apply the plan after reviewing or editing it:
 uv run fillonce apply fill-plan.json -o completed.pdf
 ```
 
+Need a static copy for a portal or PDF viewer that ignores editable field appearances?
+
+```bash
+uv run fillonce apply fill-plan.json -o completed-static.pdf --flatten
+```
+
+Flattening is explicit and irreversible in the output copy. FillOnce refuses to overwrite the original form or flatten a PDF that already contains a signature value.
+
 Or run the safe fields end to end:
 
 ```bash
@@ -143,9 +175,11 @@ plan = build_plan(
 )
 
 for item in plan.fields:
-    print(item.field.label, item.value, item.status, item.source)
+    source = item.evidence.source if item.evidence else None
+    print(item.field.label, item.value, item.status, source)
 
-apply_plan(plan, "completed.pdf")
+apply_plan(plan, "completed.pdf")                  # editable by default
+apply_plan(plan, "completed-static.pdf", flatten=True)
 ```
 
 ## Current support
@@ -156,19 +190,25 @@ FillOnce is an early, working release. Its boundaries are explicit.
 |---|---|
 | Native AcroForm text fields | ✅ |
 | Checkboxes | ✅ |
-| Choice field inspection | ✅ |
+| Choice fields | ✅ |
+| Radio-button groups | ✅ |
 | Editable output | ✅ |
+| Explicit static/flattened output | ✅ |
+| Orphaned AcroForm widget recovery | ✅ |
+| Post-write field and appearance validation | ✅ |
 | JSON/YAML structured sources | ✅ |
 | PDF/DOCX/text extraction | ✅ |
 | Per-field provenance | ✅ |
 | Conflict detection | ✅ |
+| Evidence-candidate conflict resolution | ✅ |
+| Plan-to-form SHA-256 binding | ✅ |
 | Local review UI | ✅ |
 | Scanned/flat PDF auto-layout | Planned |
 | Handwriting OCR | Planned |
 | Browser form filling | Planned |
 | Signatures or automatic submission | Intentionally excluded |
 
-See [ROADMAP.md](ROADMAP.md) for the order of work and [docs/architecture.md](docs/architecture.md) for design decisions.
+See [ROADMAP.md](ROADMAP.md) for the order of work, [docs/architecture.md](docs/architecture.md) for design decisions, and [docs/pdf-compatibility.md](docs/pdf-compatibility.md) when a form behaves differently across viewers.
 
 ## Privacy and safety
 

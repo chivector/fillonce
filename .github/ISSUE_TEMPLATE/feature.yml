@@ -1,0 +1,24 @@
+name: Feature request
+description: Propose an improvement with its trust boundary
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: paperwork
+    attributes:
+      label: What paperwork problem would this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: What should the user experience be?
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: What could go wrong?
+      description: Consider privacy, invented values, unreviewed actions, and PDF interoperability.
+    validations:
+      required: true
